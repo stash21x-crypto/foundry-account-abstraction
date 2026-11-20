@@ -12,7 +12,9 @@ import {
     MemoryTransactionHelper
 } from "lib/foundry-era-contracts/src/system-contracts/contracts/libraries/MemoryTransactionHelper.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
-import {ACCOUNT_VALIDATION_SUCCESS_MAGIC} from "lib/foundry-era-contracts/src/system-contracts/contracts/interfaces/IAccount.sol";
+import {
+    ACCOUNT_VALIDATION_SUCCESS_MAGIC
+} from "lib/foundry-era-contracts/src/system-contracts/contracts/interfaces/IAccount.sol";
 
 // OZ Imports
 import {BOOTLOADER_FORMAL_ADDRESS} from "lib/foundry-era-contracts/src/system-contracts/contracts/Constants.sol";
@@ -67,6 +69,16 @@ contract ZkMinimalAccountTest is Test {
 
         // Assert
         assertEq(magic, ACCOUNT_VALIDATION_SUCCESS_MAGIC);
+    }
+
+    function testZkRejectsTransactionRecipientOutsideAddressRange() public {
+        Transaction memory transaction =
+            _createUnsignedTransaction(minimalAccount.owner(), 113, address(usdc), 0, bytes(""));
+        transaction.to = (uint256(1) << 160) | uint160(address(usdc));
+
+        vm.prank(minimalAccount.owner());
+        vm.expectRevert(ZkMinimalAccount.ZkMinimalAccount__InvalidTransactionRecipient.selector);
+        minimalAccount.executeTransaction(EMPTY_BYTES32, EMPTY_BYTES32, transaction);
     }
 
     /*//////////////////////////////////////////////////////////////

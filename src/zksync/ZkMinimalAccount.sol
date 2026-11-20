@@ -28,21 +28,19 @@ import {ECDSA} from "lib/openzeppelin-contracts/contracts/utils/cryptography/ECD
 import {Ownable} from "lib/openzeppelin-contracts/contracts/access/Ownable.sol";
 
 /**
- * Lifecycle of a type 113 (0x71) transaction
- * msg.sender is the bootloader system contract
+ * @notice Example zkSync Era account that validates and executes native type-113 transactions.
+ * @dev Lifecycle of a type 113 (0x71) transaction:
  *
- * Phase 1 Validation
- * 1. The user sends the transaction to the "zkSync API client" (sort of a "light node")
- * 2. The zkSync API client checks to see the the nonce is unique by querying the NonceHolder system contract
- * 3. The zkSync API client calls validateTransaction, which MUST update the nonce
- * 4. The zkSync API client checks the nonce is updated
- * 5. The zkSync API client calls payForTransaction, or prepareForPaymaster & validateAndPayForPaymasterTransaction
- * 6. The zkSync API client verifies that the bootloader gets paid
+ * Phase 1 - validation:
+ * 1. The zkSync API client checks nonce uniqueness with the NonceHolder system contract.
+ * 2. It calls validateTransaction, which updates the nonce and validates the transaction.
+ * 3. It verifies the nonce update and bootloader payment.
  *
- * Phase 2 Execution
- * 7. The zkSync API client passes the validated transaction to the main node / sequencer (as of today, they are the same)
- * 8. The main node calls executeTransaction
- * 9. If a paymaster was used, the postTransaction is called
+ * Phase 2 - execution:
+ * 4. The sequencer calls executeTransaction.
+ * 5. If a paymaster was used, postTransaction is called.
+ *
+ * The zkSync API client and sequencer can perform additional processing between these steps.
  */
 contract ZkMinimalAccount is IAccount, Ownable {
     using MemoryTransactionHelper for Transaction;
@@ -56,6 +54,7 @@ contract ZkMinimalAccount is IAccount, Ownable {
     error ZkMinimalAccount__NotFromBootLoaderOrOwner();
     error ZkMinimalAccount__FailedToPay();
     error ZkMinimalAccount__InvalidSignature();
+    error ZkMinimalAccount__InvalidTransactionRecipient();
 
     /*//////////////////////////////////////////////////////////////
                             STATE VARIABLES
@@ -81,6 +80,7 @@ contract ZkMinimalAccount is IAccount, Ownable {
     /*//////////////////////////////////////////////////////////////
                                CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
+    /// @notice Sets the deployer as the account owner.
     constructor() Ownable(msg.sender) {}
 
     receive() external payable {}
@@ -88,12 +88,7 @@ contract ZkMinimalAccount is IAccount, Ownable {
     /*//////////////////////////////////////////////////////////////
                             EXTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
-    /**
-     * @notice must increase the nonce
-     * @notice must validate the transaction (check the owner signed the transaction)
-     * @notice also check to see of we have enough money in our account
-     * @param _transaction The zkSync transaction to validate.
-     */
+    /// @inheritdoc IAccount
     function validateTransaction(bytes32, bytes32, Transaction memory _transaction)
         external
         payable
@@ -103,13 +98,9 @@ contract ZkMinimalAccount is IAccount, Ownable {
         return _validateTransaction(_transaction);
     }
 
-    function executeTransaction(
-        bytes32,
-        /*_txHash*/
-        bytes32,
-        /*_suggestedSignedHash*/
-        Transaction memory _transaction
-    )
+    /// @notice Executes a transaction after bootloader validation, or when called by the owner.
+    /// @inheritdoc IAccount
+    function executeTransaction(bytes32, bytes32, Transaction memory _transaction)
         external
         payable
         requireFromBootLoaderOrOwner
@@ -117,6 +108,7 @@ contract ZkMinimalAccount is IAccount, Ownable {
         _executeTransaction(_transaction);
     }
 
+    /// @notice Validates and executes a signed transaction without a bootloader call.
     function executeTransactionFromOutside(Transaction calldata _transaction) external payable {
         bytes4 magic = _validateTransaction(_transaction);
         if (magic != ACCOUNT_VALIDATION_SUCCESS_MAGIC) {
@@ -125,25 +117,18 @@ contract ZkMinimalAccount is IAccount, Ownable {
         _executeTransaction(_transaction);
     }
 
-    function payForTransaction(
-        bytes32,
-        /*_txHash*/
-        bytes32,
-        /*_suggestedSignedHash*/
-        Transaction memory _transaction
-    )
-        external
-        payable
-    {
+    /// @notice Transfers the transaction's required fee to the bootloader.
+    /// @inheritdoc IAccount
+    function payForTransaction(bytes32, bytes32, Transaction memory _transaction) external payable {
         bool success = _transaction.payToTheBootloader();
         if (!success) {
             revert ZkMinimalAccount__FailedToPay();
         }
     }
 
-    function prepareForPaymaster(bytes32 _txHash, bytes32 _possibleSignedHash, Transaction memory _transaction)
-        external
-        payable {}
+    /// @notice Paymaster callback; this account has no custom paymaster behavior.
+    /// @inheritdoc IAccount
+    function prepareForPaymaster(bytes32, bytes32, Transaction memory) external payable {}
 
     /*//////////////////////////////////////////////////////////////
                             INTERNAL FUNCTIONS
@@ -154,7 +139,7 @@ contract ZkMinimalAccount is IAccount, Ownable {
         // call(x, y, z) -> system contract call
         if (address(NONCE_HOLDER_SYSTEM_CONTRACT).code.length > 0) {
             SystemContractsCaller.systemCallWithPropagatedRevert(
-                uint32(gasleft()),
+                Utils.safeCastToU32(gasleft()),
                 address(NONCE_HOLDER_SYSTEM_CONTRACT),
                 0,
                 abi.encodeCall(INonceHolder.incrementMinNonceIfEquals, (_transaction.nonce))
@@ -183,6 +168,11 @@ contract ZkMinimalAccount is IAccount, Ownable {
     }
 
     function _executeTransaction(Transaction memory _transaction) internal {
+        if (_transaction.to > type(uint160).max) {
+            revert ZkMinimalAccount__InvalidTransactionRecipient();
+        }
+        // The range check above guarantees this conversion cannot truncate.
+        // forge-lint: disable-next-line(unsafe-typecast)
         address to = address(uint160(_transaction.to));
         uint128 value = Utils.safeCastToU128(_transaction.value);
         bytes memory data = _transaction.data;

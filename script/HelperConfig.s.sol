@@ -3,7 +3,9 @@
 pragma solidity ^0.8.24;
 
 import {Script, console2} from "forge-std/Script.sol";
+import {EntryPoint} from "lib/account-abstraction/contracts/core/EntryPoint.sol";
 
+/// @notice Provides EntryPoint and owner configuration for supported EVM networks.
 contract HelperConfig is Script {
     error HelperConfig__InvalidChainId();
 
@@ -31,10 +33,13 @@ contract HelperConfig is Script {
         networkConfigs[ARBITRUM_SEPOLIA_CHAIN_ID] = getArbitrumConfig();
     }
 
+    /// @notice Returns configuration for the current chain.
     function getConfig() public returns (NetworkConfig memory) {
         return getConfigByChainId(block.chainid);
     }
 
+    /// @notice Returns configuration for a chain ID, deploying a local EntryPoint on Anvil.
+    /// @param chainId The chain ID to look up.
     function getConfigByChainId(uint256 chainId) public returns (NetworkConfig memory) {
         if (chainId == LOCAL_CHAIN_ID) {
             return getOrCreateAnvilEthConfig();
@@ -53,7 +58,7 @@ contract HelperConfig is Script {
         return NetworkConfig({entryPoint: ENTRY_POINT_V09, account: getConfiguredAccount()});
     }
 
-    function geZkSyncSepoliaConfig() public pure returns (NetworkConfig memory) {
+    function getZkSyncSepoliaConfig() public pure returns (NetworkConfig memory) {
         return NetworkConfig({entryPoint: address(0), account: BURNER_WALLET});
     }
 
@@ -69,7 +74,7 @@ contract HelperConfig is Script {
         // deploy mocks
         console2.log("Deploying mocks...");
         vm.startBroadcast(ANVIL_DEFAULT_ACCOUNT);
-        address entryPoint = deployCode("lib/account-abstraction/contracts/core/EntryPoint.sol:EntryPoint");
+        address entryPoint = deployCode("EntryPoint.sol:EntryPoint");
         vm.stopBroadcast();
 
         localNetworkConfig = NetworkConfig({entryPoint: entryPoint, account: ANVIL_DEFAULT_ACCOUNT});

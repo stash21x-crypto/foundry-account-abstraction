@@ -47,6 +47,19 @@ contract MinimalAccountTest is Test {
         minimalAccount.execute(dest, value, functionData);
     }
 
+    function testOnlyEntryPointCanValidateUserOps() public {
+        PackedUserOperation memory userOp;
+        uint256 prefund = 1 ether;
+        vm.deal(address(minimalAccount), prefund);
+
+        vm.prank(randomuser);
+        vm.expectRevert(MinimalAccount.MinimalAccount__NotFromEntryPoint.selector);
+        minimalAccount.validateUserOp(userOp, bytes32(0), prefund);
+
+        assertEq(address(minimalAccount).balance, prefund);
+        assertEq(randomuser.balance, 0);
+    }
+
     function testRecoverSignedOp() public {
         // Arrange
         assertEq(usdc.balanceOf(address(minimalAccount)), 0);

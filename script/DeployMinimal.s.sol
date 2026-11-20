@@ -6,7 +6,9 @@ import {Script} from "forge-std/Script.sol";
 import {MinimalAccount} from "src/ethereum/MinimalAccount.sol";
 import {HelperConfig} from "script/HelperConfig.s.sol";
 
+/// @notice Deploys a MinimalAccount using the active chain's HelperConfig.
 contract DeployMinimal is Script {
+    /// @notice Deploys the account and returns its configuration and instance.
     function run() public returns (HelperConfig, MinimalAccount) {
         return deployMinimalAccount();
     }

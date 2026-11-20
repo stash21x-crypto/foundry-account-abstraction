@@ -9,12 +9,14 @@ import {IEntryPoint} from "lib/account-abstraction/contracts/interfaces/IEntryPo
 import {MessageHashUtils} from "lib/openzeppelin-contracts/contracts/utils/cryptography/MessageHashUtils.sol";
 import {MinimalAccount} from "src/ethereum/MinimalAccount.sol";
 
+/// @notice Deploys a sample account, signs a UserOperation, and submits it to the EntryPoint.
 contract SendPackedUserOp is Script {
     using MessageHashUtils for bytes32;
 
     uint256 constant MINIMAL_ACCOUNT_FUND = 0.001 ether;
     error SendPackedUserOp__FundingFailed();
 
+    /// @notice Deploys and funds a new account, then submits one sample operation.
     function run() public returns (MinimalAccount, PackedUserOperation memory) {
         HelperConfig helperConfig = new HelperConfig();
         HelperConfig.NetworkConfig memory config = helperConfig.getConfig();
